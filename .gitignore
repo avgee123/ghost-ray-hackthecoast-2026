@@ -1,0 +1,12 @@
+# Python environment
+venv/
+__pycache__/
+*.py[cod]
+
+# Data Sensitif (Sangat Penting!)
+.env
+my-wallet.json
+*.json
+
+# Jika ada folder nets-3 yang berisi data lokal/cache
+nets-3/

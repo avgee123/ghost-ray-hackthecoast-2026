@@ -7,7 +7,6 @@ import './globals.css'
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
-  // Page 'Impact' (Page 2) sudah dihapus dari daftar navItems
   const navItems = [
     { name: 'Detector', href: '/', icon: Camera },
     { name: 'Recycler', href: '/recycler', icon: Terminal },
@@ -15,14 +14,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="en">
-      <body className="bg-[#050505] text-white flex min-h-screen">
+      <body className="bg-slate-950 text-white flex min-h-screen">
         {/* SIDEBAR NAVIGATION */}
-        <aside className="w-24 md:w-64 border-r border-white/10 flex flex-col p-6 space-y-10 bg-black/50 backdrop-blur-md">
+        <aside className="w-24 md:w-64 border-r border-slate-800 flex flex-col p-6 space-y-10 bg-slate-900">
           <div className="flex items-center gap-3 px-2">
-            <div className="bg-blue-600 p-2 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.4)]">
+            <div className="bg-purple-600 p-2 rounded-lg">
               <Waves size={24} className="text-white" />
             </div>
-            <span className="hidden md:block font-black text-xl italic tracking-tighter">GHOST-RAY</span>
+            <span className="hidden md:block font-bold text-xl text-purple-100">GHOST-RAY</span>
           </div>
 
           <nav className="flex-1 space-y-2">
@@ -32,14 +31,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 group ${
+                  className={`flex items-center gap-4 p-4 rounded-xl transition-all ${
                     isActive 
-                      ? 'bg-blue-600 text-white shadow-lg' 
-                      : 'hover:bg-white/5 text-slate-500 hover:text-white'
+                      ? 'bg-purple-600 text-white' 
+                      : 'hover:bg-slate-800 text-slate-400 hover:text-white'
                   }`}
                 >
-                  <item.icon size={22} className={isActive ? 'text-white' : 'group-hover:text-blue-400'} />
-                  <span className={`hidden md:block font-bold text-sm ${isActive ? 'text-white' : ''}`}>
+                  <item.icon size={22} />
+                  <span className={`hidden md:block font-medium text-sm`}>
                     {item.name}
                   </span>
                 </Link>
@@ -47,16 +46,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             })}
           </nav>
 
-          <div className="p-4 bg-white/5 rounded-2xl border border-white/5 hidden md:block">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Network</p>
-            <div className="flex items-center gap-2 text-[10px] font-bold text-emerald-400">
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> SOLANA DEVNET
+          <div className="p-4 bg-slate-800 rounded-xl border border-slate-700 hidden md:block">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Network</p>
+            <div className="flex items-center gap-2 text-xs font-medium text-emerald-400">
+              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Solana Devnet
             </div>
           </div>
         </aside>
 
         {/* MAIN CONTENT AREA */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto bg-slate-950">
           <div className="max-w-7xl mx-auto min-h-screen">
             {children}
           </div>

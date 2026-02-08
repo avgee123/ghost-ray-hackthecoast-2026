@@ -152,13 +152,16 @@ def mint_impact_nft(receiver_addr, country, mass, reward, status):
             
     return "Error: Max retries reached"
     
-def send_reward_with_memo(receiver_pubkey_str, amount_sol, country="Verified", weight="Recycled"):
-    """
-    Transfer SOL otomatis dari UN_ADDRESS ke User.
-    """
+def send_reward_with_memo(receiver_pubkey_str, amount_sol, country, weight):
+    print(f"[PAYMENT] Sending {amount_sol} SOL to {receiver_pubkey_str}")
+    
+    # 1. Prepare the Memo String
+    # This is what will show up on the Solana Explorer
+    memo_text = f"GhostRay | {country} | {weight}kg | Verified"
+
     url = "https://api.shyft.to/sol/v1/wallet/send_sol"
     headers = {
-        "x-api-key": SHYFT_API_KEY,
+        "x-api-key": SHYFT_API_KEY, 
         "Content-Type": "application/json"
     }
     
@@ -166,35 +169,47 @@ def send_reward_with_memo(receiver_pubkey_str, amount_sol, country="Verified", w
         "network": "devnet",
         "from_address": UN_ADDRESS_STR,
         "to_address": receiver_pubkey_str,
-        "amount": float(amount_sol)
+        "amount": float(amount_sol),
+        "memo": memo_text  # <--- SHYFT HANDLES THE MEMO FOR YOU HERE!
     }
 
     try:
-        # 1. Build Transaksi via Shyft
+        # Request the transaction draft
         res = requests.post(url, headers=headers, json=payload)
         data = res.json()
 
         if not data.get("success"):
+            print(f"[ERROR] Shyft Payout Fail: {data}")
             return f"Error: {data.get('message')}"
 
-        # 2. Sign Otomatis pakai Keypair UN
-        signer = Keypair.from_base58_string(UN_PK_STR)
-        tx_bytes = base64.b64decode(data["result"]["encoded_transaction"])
-        signed_tx = VersionedTransaction(VersionedTransaction.from_bytes(tx_bytes).message, [signer])
+        # 2. Sign the transaction (same way you did for the NFT)
+        encoded_tx = data["result"]["encoded_transaction"]
+        tx_bytes = base64.b64decode(encoded_tx)
+        
+        # 'sender_keypair' is your UN Private Key Keypair object
+        raw_tx = VersionedTransaction.from_bytes(tx_bytes)
+        signed_tx = VersionedTransaction(raw_tx.message, [sender_keypair])
 
-        # 3. Broadcast ke RPC
+        # 3. Broadcast to RPC
         rpc_url = f"https://devnet-rpc.shyft.to?api_key={SHYFT_API_KEY}"
         rpc_payload = {
             "jsonrpc": "2.0", "id": 1,
             "method": "sendTransaction",
-            "params": [base64.b64encode(bytes(signed_tx)).decode("utf-8"), {"encoding": "base64"}]
+            "params": [
+                base64.b64encode(bytes(signed_tx)).decode("utf-8"), 
+                {"encoding": "base64"}
+            ]
         }
 
         rpc_res = requests.post(rpc_url, json=rpc_payload).json()
         
         if "result" in rpc_res:
-            return rpc_res["result"] # Ini Signature-nya
+            sig = rpc_res["result"]
+            print(f"[SUCCESS] Payout Signature: {sig}")
+            return sig
+        
         return f"Error: {rpc_res}"
 
     except Exception as e:
-        return f"Error: {str(e)}"
+        print(f"[CRITICAL ERROR]: {e}")
+        return None

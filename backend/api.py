@@ -130,9 +130,16 @@ async def process_detection(manual_country: str = None):
         nft_address = f"Error: {str(e)}"
         final_status = "error"
 
+    detected_label = "Debris"
+    if items_found > 0:
+        class_id = int(results[0].boxes[0].cls[0])
+        detected_label = yolo_model.names[class_id]
+        print(f"[+] Verified Label: {detected_label}") #
+
     # UPDATE DATA GLOBAL (Agar bisa dibaca /api/last-scan)
     last_scan_data = {
         "items_count": items_found,
+        "item_type": detected_label, # Tambahkan ini
         "reward_sol": final_reward,
         "collector_wallet": collector_wallet,
         "nft_address": str(nft_address)

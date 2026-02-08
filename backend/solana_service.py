@@ -213,3 +213,5 @@ def send_reward_with_memo(receiver_pubkey_str, amount_sol, country, weight):
     except Exception as e:
         print(f"[CRITICAL ERROR]: {e}")
         return None
+    
+    

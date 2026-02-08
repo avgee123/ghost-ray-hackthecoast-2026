@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+:root {
+  /* Paksa jadi gelap karena tema dApp kita Dark Mode */
+  --background: #050505;
+  --foreground: #ffffff;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  /* Paksa font agar terlihat lebih teknis */
+  font-family: 'Inter', system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Biar scrollbar-nya tetap estetik (gelap) */
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #050505;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 10px;
+}

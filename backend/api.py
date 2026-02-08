@@ -11,13 +11,13 @@ from fastapi import FastAPI, Body
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
 # Load Environment Variables
 load_dotenv()
 
 app = FastAPI()
 
-# Biarkan Frontend bisa akses API ini
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,29 +25,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- SKEMA DATA & VARIABLE GLOBAL ---
+class RecycleRequest(BaseModel):
+    nft_address: str
+    collector_wallet: str
+    amount: float
+
+# Variable ini menyimpan hasil scan terakhir agar bisa dibaca Page 3
+last_scan_data = {
+    "items_count": 0,
+    "reward_sol": 0.0,
+    "collector_wallet": "",
+    "nft_address": ""
+}
+
 # --- KONFIGURASI AI & MODEL ---
 GENAI_API_KEY = os.getenv("GENAI_API_KEY")
 genai.configure(api_key=GENAI_API_KEY)
-
-# Gunakan versi 1.5-flash agar lebih stabil jika 2.5 belum tersedia di regionmu
 gemini_model = genai.GenerativeModel('gemini-2.5-flash')
+yolo_model = YOLO('best.pt') 
+engine = SustainabilityEngine('WorldSustainabilityDataset.csv')
 
-# Pastikan path ke best.pt sudah benar setelah training selesai
-yolo_model = YOLO('backend/best.pt') 
-
-# Pastikan file CSV ada di folder backend
-engine = SustainabilityEngine('backend/WorldSustainabilityDataset.csv')
-
-# Inisialisasi Kamera
 cap = cv2.VideoCapture(0)
 
 def get_auto_country_code():
     try:
         response = requests.get('https://ipapi.co/json/', timeout=5)
         data = response.json()
-        return data.get('country_code_iso3', 'IDN') 
+        return data.get('country_code_iso3', 'CAN') 
     except:
-        return 'IDN' 
+        return 'CAN' 
 
 @app.get("/video_feed")
 def video_feed():
@@ -55,8 +62,7 @@ def video_feed():
         while True:
             success, frame = cap.read()
             if not success: break
-            # Deteksi Real-time untuk UI
-            results = yolo_model(frame, conf=0.6, verbose=False)
+            results = yolo_model(frame, conf=0.25, verbose=False)
             annotated_frame = results[0].plot()
             ret, buffer = cv2.imencode('.jpg', annotated_frame)
             yield (b'--frame\r\n'
@@ -66,41 +72,49 @@ def video_feed():
 # --- PAGE 1: DETEKSI & MINT NFT ---
 @app.post("/process_detection")
 async def process_detection(manual_country: str = None):
-    country_code = manual_country if manual_country else get_auto_country_code()
+    global last_scan_data
+    print("\n[STEP 1] Starting Detection...")
     
+    country_code = manual_country if manual_country else get_auto_country_code()
     success, frame = cap.read()
-    if not success: return {"status": "error", "message": "Camera failed"}
+    if not success: 
+        return {"status": "error", "message": "Camera failed"}
 
-    # 1. YOLO Detection
-    results = yolo_model(frame, conf=0.6, verbose=False)
-    if len(results[0].boxes) == 0:
+    results = yolo_model(frame, conf=0.15, verbose=False)
+    # Kita hitung jumlah item dari hasil YOLO
+    items_found = len(results[0].boxes)
+    
+    if items_found == 0:
+        print("[-] No debris detected by YOLO.")
         return {"status": "no_debris", "message": "No debris detected"}
 
-    # Simpan frame sementara untuk dianalisa Gemini
     temp_img = "detected_debris.jpg"
     cv2.imwrite(temp_img, frame)
 
-    # 2. Gemini Analysis (Weight Estimation)
-    img = PIL.Image.open(temp_img)
-    prompt = "Identify the type of debris and estimate its total weight in kg. Return ONLY JSON: {'total_weight': float}"
+    print("[STEP 2] Analyzing with Gemini...")
+    prompt = "Identify debris type and estimate weight in kg. Return ONLY raw JSON: {'total_weight': float}. No explanation."
+    total_kg = 0.5 
     
     try:
-        response = gemini_model.generate_content([prompt, img])
-        clean_json = response.text.replace('```json', '').replace('```', '').strip()
+        with PIL.Image.open(temp_img) as img:
+            response = gemini_model.generate_content([prompt, img])
+        raw_text = response.text.strip()
+        clean_json = raw_text.replace('```json', '').replace('```', '').strip()
         analysis = json.loads(clean_json)
         total_kg = analysis.get('total_weight', 0.5)
+        print(f"[+] Gemini estimation: {total_kg} kg")
     except Exception as e:
-        print(f"Gemini Error: {e}")
-        total_kg = 0.5 # Default jika AI sibuk
+        print(f"[!] Gemini Error: {e}")
     
-    if os.path.exists(temp_img): os.remove(temp_img)
+    if os.path.exists(temp_img):
+        os.remove(temp_img)
 
-    # 3. Sustainability Engine Logic
+    # HITUNG REWARD
     multiplier, _ = engine.get_multiplier(country_code)
     final_reward = round(total_kg * 0.01 * multiplier, 6)
 
-    # 4. Mint Impact NFT ke Wallet Nelayan (Collector)
-    nft_address = None
+    # MINT NFT
+    print(f"[STEP 3] Minting NFT for {country_code}...")
     collector_wallet = os.getenv("COLLECTOR_WALLET_ADDRESS")
     
     try:
@@ -111,47 +125,51 @@ async def process_detection(manual_country: str = None):
             reward=final_reward,
             status="COLLECTED"
         )
+        final_status = "success" if nft_address and not str(nft_address).startswith("Error") else "error"
     except Exception as e:
-        print(f"NFT Minting failed: {e}")
+        nft_address = f"Error: {str(e)}"
+        final_status = "error"
 
-    return {
-        "status": "success",
-        "message": "Impact Reported! NFT Issued to Collector.",
-        "location": country_code,
-        "weight": total_kg,
-        "reward_sol_pending": final_reward,
-        "nft_address": nft_address,
-        "collector_wallet": collector_wallet
+    # UPDATE DATA GLOBAL (Agar bisa dibaca /api/last-scan)
+    last_scan_data = {
+        "items_count": items_found,
+        "reward_sol": final_reward,
+        "collector_wallet": collector_wallet,
+        "nft_address": str(nft_address)
     }
 
-# --- PAGE 3: RECYCLER CONFIRMATION ---
+    return last_scan_data
+
+# --- PAGE 3: DATA SYNC & CONFIRMATION ---
+
+@app.get("/api/last-scan")
+async def get_last_scan():
+    """Mengirimkan data hasil scan terakhir ke Page 3"""
+    return last_scan_data
+
 @app.post("/confirm_recycle")
-async def confirm_recycle(
-    nft_address: str = Body(...), 
-    collector_wallet: str = Body(...), 
-    amount: float = Body(...)
-):
+async def confirm_recycle(req: RecycleRequest):
+    """Proses pembayaran otomatis dari UN_ADDRESS ke User"""
+    print(f"\n[STEP 4] Recycler Confirming Payment...")
+    print(f"[>] Sending: {req.amount} SOL to {req.collector_wallet}")
+
     try:
-        # 1. Eksekusi Pembayaran SOL (UN -> Nelayan)
-        # Fungsi ini sekarang otomatis pakai UN_PRIVATE_KEY dari .env
         tx_sig = solana_service.send_reward_with_memo(
+            receiver_pubkey_str=req.collector_wallet,
+            amount_sol=req.amount,
             country="Verified", 
-            weight="Recycled",
-            amount_sol=amount,
-            receiver_pubkey_str=collector_wallet
+            weight="Recycled"
         )
 
-        if tx_sig:
-            # 2. Update Status NFT jadi RECYCLED
-            update_res = solana_service.update_to_recycled(nft_address)
+        if tx_sig and not str(tx_sig).startswith("Error"):
             return {
-                "status": "success",
+                "status": "success", 
                 "signature": tx_sig,
-                "nft_update": update_res,
                 "explorer_url": f"https://explorer.solana.com/tx/{tx_sig}?cluster=devnet"
             }
         
-        return {"status": "error", "message": "Transaction failed"}
+        return {"status": "error", "message": str(tx_sig)}
+
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

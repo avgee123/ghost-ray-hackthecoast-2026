@@ -10,3 +10,11 @@ my-wallet.json
 
 # Jika ada folder nets-3 yang berisi data lokal/cache
 nets-3/
+
+TACO-1/
+backend/runs/
+yolov8n.pt
+backend/best.pt
+venv/
+.env
+runs/

@@ -1,25 +1,22 @@
 import pandas as pd
 
-# Nama kolom berdasarkan CSV yang diupload
-# Nama kolom yang SUDAH DISESUAIKAN dengan file CSV asli kamu
 COL_CO2 = "Adjusted savings: carbon dioxide damage (% of GNI) - NY.ADJ.DCO2.GN.ZS"
-COL_GDP = "GDP per capita (current US$) - NY.GDP.PCAP.CD" # Tadi kamu pakai MKTP, di CSV adalah PCAP
+COL_GDP = "GDP per capita (current US$) - NY.GDP.PCAP.CD" 
 COL_RES = "Adjusted savings: natural resources depletion (% of GNI) - NY.ADJ.DRES.GN.ZS"
-COL_POV = "Proportion of population below international poverty line (%) - SI_POV_DAY1 - 1.1.1" # Di CSV namanya ini
+COL_POV = "Proportion of population below international poverty line (%) - SI_POV_DAY1 - 1.1.1" 
 COL_REN = "Renewable energy consumption (% of total final energy consumption) - EG.FEC.RNEW.ZS"
 
 class SustainabilityEngine:
     def __init__(self, csv_path):
         self.df = pd.read_csv(csv_path)
-        # Ambil data tahun terbaru saja untuk setiap negara agar relevan
+
         self.latest_df = self.df.sort_values('Year').groupby('Country Code').last().reset_index()
-        
-        # Hitung Global Min/Max untuk normalisasi
+
         self.stats = {
             'co2': {'min': self.df[COL_CO2].min(), 'max': self.df[COL_CO2].max()},
             'gdp': {'min': self.df[COL_GDP].min(), 'max': self.df[COL_GDP].max()},
-            'res': 30, # Cap sesuai rumusmu
-            'pov': 50, # Cap sesuai rumusmu
+            'res': 30, 
+            'pov': 50, 
             'ren': 100
         }
 

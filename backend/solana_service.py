@@ -1,5 +1,8 @@
+import os
 import json
 import requests
+import base58 # Tambahkan ini (pip install base58)
+from dotenv import load_dotenv
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 from solders.system_program import TransferParams, transfer
@@ -7,33 +10,31 @@ from solana.rpc.api import Client
 from solders.transaction import Transaction
 from solders.instruction import Instruction
 
-# Konfigurasi Network & Wallet
+load_dotenv()
+
+# --- CONFIGURATION ---
 client = Client("https://api.devnet.solana.com")
-with open("backend/my-wallet.json", "r") as f:
-    secret = json.load(f)
-sender_keypair = Keypair.from_bytes(bytes(secret))
+SHYFT_API_KEY = os.getenv("SHYFT_API_KEY")
 
-# API Config
+# Mengambil dompet UN dari Private Key di .env
+un_pk_str = os.getenv("UN_PRIVATE_KEY")
+sender_keypair = Keypair.from_bytes(base58.b58decode(un_pk_str))
+UN_ADDRESS_STR = str(sender_keypair.pubkey())
+
 MEMO_PROGRAM_ID = Pubkey.from_string("MemoSq4gqAB2Cc9BnZ98zWn8YSbt9YEzMBeUZ3q6P40")
-SHYFT_API_KEY = "Kjqw1pkOSTd9LwBI" 
 
-def send_reward_with_memo(country, weight, multiplier, amount_sol, receiver_pubkey_str):
-    """Fungsi ini dipanggil oleh Recycler di Page 3 saat melakukan pembayaran"""
+def send_reward_with_memo(country, weight, amount_sol, receiver_pubkey_str):
+    """Kirim SOL dari UN ke Nelayan"""
     receiver_pubkey = Pubkey.from_string(receiver_pubkey_str)
-    
     lamports = int(amount_sol * 1_000_000_000)
+    
     transfer_ix = transfer(TransferParams(
         from_pubkey=sender_keypair.pubkey(),
         to_pubkey=receiver_pubkey,
         lamports=lamports
     ))
 
-    memo_data = {
-        "org": "UN-GhostRay",
-        "loc": country,
-        "mass": weight,
-        "status": "FINALIZED"
-    }
+    memo_data = {"org": "UN-GhostRay", "loc": country, "mass": weight, "status": "FINALIZED"}
     memo_ix = Instruction(
         program_id=MEMO_PROGRAM_ID,
         data=json.dumps(memo_data).encode('utf-8'),
@@ -44,17 +45,18 @@ def send_reward_with_memo(country, weight, multiplier, amount_sol, receiver_pubk
     txn.add(transfer_ix)
     txn.add(memo_ix)
 
+    # Kirim transaksi menggunakan dompet UN
     result = client.send_transaction(txn, sender_keypair)
     return str(result.value)
 
 def mint_impact_nft(receiver_addr, country, mass, reward, status):
-    """Dipanggil di Page 1: Mencatat pengumpulan pertama kali"""
+    """Mencatat pengumpulan di Page 1"""
     url = "https://api.shyft.to/sol/v1/nft/compressed/mint"
     headers = {"Content-Type": "application/json", "x-api-key": SHYFT_API_KEY}
     
     payload = {
         "network": "devnet",
-        "creator_wallet": "98bmG75oh3ZeUyDLrM5BkWu7HvzC7SV1ke1Wtr3C3AfW",
+        "creator_wallet": UN_ADDRESS_STR, # Gunakan alamat UN
         "metadata": {
             "name": f"Ocean Guardian: {country}",
             "symbol": "GRAY",
@@ -63,36 +65,29 @@ def mint_impact_nft(receiver_addr, country, mass, reward, status):
                 {"trait_type": "Location", "value": country},
                 {"trait_type": "Mass", "value": f"{mass}kg"},
                 {"trait_type": "Status", "value": status},
-                {"trait_type": "Reward_Value", "value": f"{reward}"},
-                {"trait_type": "Collector_Wallet", "value": receiver_addr}
+                {"trait_type": "Reward_Value", "value": f"{reward}"}
             ],
             "image": "https://gateway.pinata.cloud/ipfs/QmZ..." 
         },
-        "receiver": receiver_addr,
-        "fee_payer": "98bmG75oh3ZeUyDLrM5BkWu7HvzC7SV1ke1Wtr3C3AfW"
+        "receiver": receiver_addr, # Dikirim ke Nelayan
+        "fee_payer": UN_ADDRESS_STR # UN yang bayar biaya minting
     }
-
-    try:
-        response = requests.post(url, headers=headers, json=payload)
-        res_data = response.json()
-        return res_data["result"]["mint"] if res_data.get("success") else None
-    except Exception as e:
-        print(f"Error Minting: {e}")
-        return None
+    # ... (sisanya sama)
 
 def update_to_recycled(nft_address):
-    """Dipanggil di Page 3: Merubah status NFT di Blockchain"""
+    """Update status NFT di Page 3"""
     url = "https://api.shyft.to/sol/v1/nft/compressed/update"
     headers = {"Content-Type": "application/json", "x-api-key": SHYFT_API_KEY}
     
     payload = {
         "network": "devnet",
         "nft_address": nft_address,
-        "authority_address": "98bmG75oh3ZeUyDLrM5BkWu7HvzC7SV1ke1Wtr3C3AfW",
+        "authority_address": UN_ADDRESS_STR, # UN sebagai otoritas
         "attributes": [
             {"trait_type": "Status", "value": "RECYCLED"}
         ]
     }
+    # ... (sisanya sama)
 
     try:
         response = requests.post(url, headers=headers, json=payload)
